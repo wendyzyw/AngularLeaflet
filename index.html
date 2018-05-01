@@ -1,0 +1,312 @@
+<html ng-app="AngularLeaflet">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+		
+        <title>AUS_LGA</title>
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+		
+		<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.6/angular.min.js"></script>
+		<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.6/angular-resource.js"></script>
+		<script src="http://cdn.leafletjs.com/leaflet-0.7.1/leaflet.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-plugins/3.0.2/layer/Icon.Canvas.js"></script>
+		<!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.3.0/leaflet.markercluster.js"></script> -->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/0.5.0/leaflet.markercluster.js"></script>
+		<script src="js/angular-leaflet-directive.js"></script>
+		
+		<!-- css -->
+		<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.1/leaflet.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/0.5.0/MarkerCluster.css">
+		<!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/0.5.0/MarkerCluster.Default.css"> -->
+		<link rel="stylesheet" href="css/MarkerCluster.Default.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css">
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+		
+		<style>
+			.legend {
+				padding: 6px 8px;
+				font: 14px/16px Arial, Helvetica, sans-serif;
+				box-shadow: 0 0 15px rgba(0,0,0,0.2);
+				background: rgba(255, 255, 255, 0.9);
+				border-radius: 5px;
+				font-weight: bold;
+				line-height: 18px;
+				color: #555;
+				width: 250px;
+			}
+
+			.legend i {
+				clear: both;
+				width: 16px;
+				height: 16px;
+				float: left;
+				opacity: 0.7;
+				margin-right: 8px;
+			}
+			
+			.melbourne {
+				background: rgba(255, 255, 255, 0.9);
+				border-radius: 5px;
+			}
+			
+			div.melbourne.map {
+				font-size: 2em;
+				font-weight: bold;
+				position: absolute;
+				bottom: 1em;
+				left: 1em;
+				z-index: 100;
+				padding: .2em .5em;
+				line-height: 1.1em;
+				text-align: center;
+			}
+
+		</style>
+		<script>
+		
+	var app = angular.module("AngularLeaflet", ["leaflet-directive","ngResource"]);
+	app.controller("GeoJSONController", [ '$scope', '$http', 'leafletData', function($scope, $http, leafletData) {
+	  
+		$scope.$on("leafletDirectiveGeoJson.mouseover", function(ev, leafletPayload) {
+				console.log(ev);
+                suburbMouseover(leafletPayload.leafletObject.feature, leafletPayload.leafletEvent);
+            });
+		
+		//hover over a suburb shows it's detail 
+		function suburbMouseover(suburb, leafletEvent) {
+				console.log(suburb);
+                var layer = leafletEvent.target;
+                layer.setStyle({
+                    weight: 2,
+                    color: 'red',
+					dashArray: '1'
+                });
+                layer.bringToFront();
+                $scope.selectedSuburb = suburb;
+            }
+		
+		var legendColors = ['#00D1FF','#87FF00','#FFE100','#FF8900','#FF0800'];
+		
+		mapPoint = function (point, vs) {
+			// ray-casting algorithm based on
+			// http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
+			//vs is an array or points (coordinates)
+			
+			var x = point[0], y = point[1];
+			
+			var inside = false;
+			for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+				var xi = vs[i][0], yi = vs[i][1];
+				var xj = vs[j][0], yj = vs[j][1];
+				
+				var intersect = ((yi > y) != (yj > y))
+					&& (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+				if (intersect) inside = !inside;
+			}
+			
+			return inside;
+		};
+		
+		var tweetsToMarkers = function(rows){
+			return rows.map(function(oneTweet){
+				return {
+					layer: 'All_Tweets',
+					lat: oneTweet.value[1].coordinates[1],
+					lng: oneTweet.value[1].coordinates[0],
+					message: oneTweet.value[0],
+					icon: {
+							icon: 'smile',
+							markerColor: 'blue',
+							prefix: 'fa'
+						}
+				};
+			});
+		};
+		
+		var tweetsToFeatures = function(rows){
+		//return a list of feature (geo json object)
+			return rows.map(function(oneTweet){
+				return{
+					geometry: {
+						type: 'Point',
+						coordinates: [oneTweet.value[1].coordinates[1],oneTweet.value[1].coordinates[0]]
+					},
+					type: 'Feature',
+					properties: {
+						text: oneTweet.value[0],
+						date: oneTweet.value[3]
+					},
+					id: oneTweet.id
+				}
+			});
+		};
+		
+		//data read from db.json file 
+		function generateGeojson(data){
+			var features = {};
+			if (data.rows){
+				features = tweetsToFeatures(data.rows);
+			}
+			return {
+				type: 'FeatureCollection',
+				features: features
+			}
+		}
+		
+		$scope.interactivity = "";
+	  
+        angular.extend($scope, {
+            melbourne: {
+                lat: -37.8136,
+                lng: 144.9631,
+                zoom: 10
+            },
+			legend: {
+				colors: legendColors,
+				//150-..., 120-150, 100-120, 80-100, ..-80
+				labels: ['affordable','acceptable','moderately unacceptable','unaffordable','severely unaffordable'],
+			},
+			events: {
+                    map: {
+                        enable: ['moveend', 'popupopen'],
+                        logic: 'emit'
+                    },
+                    marker: {
+                        enable: [],
+                        logic: 'emit'
+                    }
+                },
+			layers: {
+				baselayers: {
+					osm: {
+						name: 'OpenStreetMap',
+						url: 'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        type: 'xyz'
+					},
+				},
+				overlays: {}
+			}
+        });
+		
+		//map each polygon to a color according to the range it's rai falls in 
+		function getColor(suburb) {
+			if (!suburb || !suburb["properties"] || !suburb["properties"]["rai_national_total_2017_q2"]) {
+				return "#FFF";
+			}
+
+			var raiVal = suburb["properties"]["rai_national_total_2017_q2"];
+			if (raiVal<80){
+				return [legendColors[4]];
+			} else if (80<=raiVal && raiVal<100){
+				return [legendColors[3]];
+			} else if (100<=raiVal && raiVal<120){
+				return [legendColors[2]];
+			} else if (120<=raiVal && raiVal<150){
+				return [legendColors[1]];
+			} else {
+				return [legendColors[0]];
+			}
+		}
+		
+		function style(suburb) {
+			return {
+				fillColor: getColor(suburb),
+				weight: 1,
+				opacity: 1,
+				color: 'white',
+				dashArray: '1',
+				fillOpacity: 0.7
+			};
+		}
+
+		
+		$http.get("json/melb_nrai_2017.geo.json").success(function(data,status){
+			angular.extend($scope.layers.overlays, {
+				nari: {
+					name: 'NARI All Melb Surburbs 2017 Q2',
+					data: data,
+					resetStyleOnMouseout: true,
+					type: 'geoJSONShape',
+					visible: true,
+					layerOptions: {
+						style: style,
+					}
+				},
+				pre_selectedSuburb: {}
+			});
+			$scope.allSubs = data;
+			$scope.selectedSuburb = $scope.layers.overlays.pre_selectedSuburb;
+		});
+		
+		$http.get("json/db.json").success(function(data) {
+				if (data.rows){
+					$scope.markers = tweetsToMarkers(data.rows.slice(0,9999));
+				}
+				angular.extend($scope.layers.overlays, {
+					All_Tweets: {
+						name: 'All Tweets',
+						type: 'markercluster',
+						visible: true
+					}
+				});
+				
+				//point
+				var first = data.rows[0].value[1];
+				//coordinates
+				var pointSet = $scope.allSubs.features[0].geometry.coordinates;
+            });
+		
+		<!-- $http.get("json/db.json").success(function(data) { -->
+			<!-- angular.extend($scope,{ -->
+				<!-- tweetsData: { -->
+					<!-- data: data -->
+				<!-- } -->
+			<!-- }); -->
+			<!-- angular.extend($scope.layers.overlays, { -->
+				<!-- tweets: { -->
+					<!-- name: 'TweetsMap', -->
+					<!-- type: 'geoJSONAwesomeMarker', -->
+					<!-- data: generateGeojson(data), -->
+					<!-- visible: true, -->
+					<!-- icon: { -->
+						<!-- icon: 'heart', -->
+						<!-- markerColor: 'red', -->
+						<!-- prefix: 'fa' -->
+					<!-- } -->
+				<!-- } -->
+			<!-- }); -->
+			
+		<!-- }); -->
+		
+		
+		
+    }]);
+      </script>
+		
+    </head>
+
+	<body ng-controller="GeoJSONController">
+		<nav class="navbar navbar-expand-lg navbar-light bg-light">
+		  <div class="collapse navbar-collapse" id="navbarNavDropdown">
+			<ul class="navbar-nav">
+			  <li class="nav-item active">
+				<a class="nav-link" href="index.html">Map</a>
+			  </li>
+			  <li class="nav-item">
+				<a class="nav-link" href="heatmap.html">HeatMap</a>
+			  </li>
+			</ul>
+		  </div>
+		</nav>
+		<leaflet lf-center="melbourne" layers="layers" event-broadcast="events" markers="markers" legend="legend" width="100%" height="480px"></leaflet>
+		<!-- <div class="melbourne map f32"> -->
+			<!-- <div ng-show="selectedSurb" ></div> -->
+			<!-- postcode: {{ selectedSuburb.properties.geography_name || ''}} -->
+			<!-- NARI: {{ selectedSuburb.properties.rai_national_total_2017_q2 || '' }} -->
+		<!-- </div> -->
+		
+	</body>
+</html>
