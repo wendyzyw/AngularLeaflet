@@ -179,7 +179,7 @@
 					//input from tsv file 
 					var heatmapChart = function(data) {
 						  var colorScale = d3.scale.quantile()
-							  .domain([-0.05,0.15])
+							  .domain([-0.05,0.13])
 							  .range(colors);
 
 							  //individual grids 
@@ -228,7 +228,7 @@
 
 						  //color bar legend 
 						  var legend = svg.selectAll(".legend")
-							  .data(colorScale.quantiles, function(d) { return d; });
+							  .data([-0.005].concat(colorScale.quantiles()), function(d) { return d; });
 
 						  legend.enter().append("g")
 							  .attr("class", "legend");
@@ -242,7 +242,7 @@
 
 						  legend.append("text")
 							.attr("class", "mono")
-							.text(function(d) { return "≥ " + Math.round(d); })
+							.text(function(d) { return "≥ " + parseFloat(Math.round(d * 1000) / 1000).toFixed(3);; })
 							.attr("x", function(d, i) { return legendElementWidth * i; })
 							.attr("y", height + gridSize);
 
